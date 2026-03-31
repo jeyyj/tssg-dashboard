@@ -108,7 +108,7 @@
   <div class="header">
     <div class="header-left">
       <h1>TSSG Rover Crew — Membership Payments</h1>
-      <p>Dec 2024 – Dec 2025 &nbsp;·&nbsp; MVR 30 / member / month &nbsp;·&nbsp; Due up to: <strong id="due-label">Mar 2025</strong></p>
+      <p>Dec 2025 – Dec 2026 &nbsp;·&nbsp; MVR 30 / month &nbsp;·&nbsp; Fines from Apr &nbsp;·&nbsp; Due up to: <strong id="due-label">Apr 2026</strong></p>
     </div>
     <button class="refresh-btn" onclick="loadData()">
       <span class="spin-icon" id="spin-icon">↻</span> Refresh from sheet
@@ -140,14 +140,15 @@
       </div>
       <table>
         <thead><tr>
-          <th style="width:18%">ID</th>
-          <th style="width:28%">Name</th>
-          <th style="width:13%;text-align:right">Paid (due)</th>
-          <th style="width:13%;text-align:right">Arrears</th>
-          <th style="width:13%;text-align:right">Advance</th>
-          <th style="width:15%;text-align:center">Status</th>
+          <th style="width:16%">ID</th>
+          <th style="width:26%">Name</th>
+          <th style="width:12%;text-align:right">Paid</th>
+          <th style="width:10%;text-align:right">Fines</th>
+          <th style="width:12%;text-align:right">Arrears</th>
+          <th style="width:10%;text-align:right">Advance</th>
+          <th style="width:14%;text-align:center">Status</th>
         </tr></thead>
-        <tbody id="tbl-body"><tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text-tertiary);">Loading...</td></tr></tbody>
+        <tbody id="tbl-body"><tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--text-tertiary);">Loading...</td></tr></tbody>
       </table>
       <div class="pagination">
         <span id="page-info"></span>
@@ -199,12 +200,30 @@ const SHEET_ID  = '16sAn2F40Kn0IIZQzwupDqLoRezzaKoS7ZvkIYNC_jBo';
 const API_KEY   = 'AIzaSyASgzYSXzwJwRT2UzvRMr8Djks3EjL8S5Q';
 const SHEET_TAB = 'Payments';
 const FEE       = 30;
+const FINE      = 30;
 
-const MONTH_LABELS = ['Dec 2024','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec 2025'];
-const SHORT        = ['Dec','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec2'];
+// Dec 2025 to Dec 2026 (13 months, indices 0-12)
+const MONTH_LABELS = ['Dec 2025','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec 2026'];
+const SHORT        = ['Dec','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-// Today: 31 March 2025 — due months are Dec(0) Jan(1) Feb(2) Mar(3)
-const TODAY_MONTH_IDX = 3;
+// Fines apply from April (index 4) onwards
+const FINE_START_IDX  = 4;
+// Today = April 1 2026 - due up to and including April
+const TODAY_MONTH_IDX = 4;
+
+// Rolling consecutive missed months fine calculator
+function calcFines(pay) {
+  let streak = 0, totalFines = 0;
+  for (let i = FINE_START_IDX; i <= TODAY_MONTH_IDX; i++) {
+    if (pay[i] < FEE) {
+      streak++;
+      if (streak === 3) { totalFines++; streak = 0; }
+    } else {
+      streak = 0;
+    }
+  }
+  return totalFines * FINE;
+}
 
 // Known member roster (so members with zero payments still appear)
 const ROSTER = [
@@ -308,15 +327,16 @@ async function loadData() {
       const advancePaid = pay.slice(TODAY_MONTH_IDX + 1).reduce((a,b)=>a+b,0);
       const totalPaid   = pay.reduce((a,b)=>a+b,0);
       const dueExpected = FEE * (TODAY_MONTH_IDX + 1);
-      const arrears     = Math.max(0, dueExpected - duePaid);
+      const fines       = calcFines(pay);
+      const arrears     = Math.max(0, dueExpected + fines - duePaid);
       const cleared     = arrears === 0;
       let status;
-      if (totalPaid === 0)            status = 'never';
+      if (totalPaid === 0)                 status = 'never';
       else if (cleared && advancePaid > 0) status = 'advance';
-      else if (cleared)               status = 'clear';
-      else if (duePaid > 0)           status = 'partial';
-      else                            status = 'arrears';
-      return {...m, pay, duePaid, advancePaid, totalPaid, arrears, cleared, status};
+      else if (cleared)                    status = 'clear';
+      else if (duePaid > 0)                status = 'partial';
+      else                                 status = 'arrears';
+      return {...m, pay, duePaid, advancePaid, totalPaid, fines, arrears, cleared, status};
     });
 
     const now = new Date();
@@ -347,11 +367,12 @@ function renderMetrics() {
   const advance  = members.reduce((a,m)=>a+m.advancePaid,0);
   const rate     = Math.round(dueColl/dueExp*100);
   const cleared  = members.filter(m=>m.cleared).length;
+  const totalFines = members.reduce((a,m)=>a+m.fines,0);
   document.getElementById('metrics').innerHTML = `
-    <div class="metric"><div class="metric-label">Collected (due)</div><div class="metric-val" style="color:#3B6D11;">MVR ${Math.round(dueColl).toLocaleString()}</div><div class="metric-sub">of MVR ${dueExp.toLocaleString()} due (Dec–Mar)</div></div>
+    <div class="metric"><div class="metric-label">Collected (due)</div><div class="metric-val" style="color:#3B6D11;">MVR ${Math.round(dueColl).toLocaleString()}</div><div class="metric-sub">of MVR ${dueExp.toLocaleString()} due (Dec–Apr)</div></div>
     <div class="metric"><div class="metric-label">Total arrears</div><div class="metric-val" style="color:#A32D2D;">MVR ${Math.round(arrears).toLocaleString()}</div><div class="metric-sub">${rate}% collection rate</div></div>
+    <div class="metric"><div class="metric-label">Fines issued</div><div class="metric-val" style="color:#854F0B;">MVR ${Math.round(totalFines).toLocaleString()}</div><div class="metric-sub">${members.filter(m=>m.fines>0).length} members fined</div></div>
     <div class="metric"><div class="metric-label">Members cleared</div><div class="metric-val" style="color:#3B6D11;">${cleared} / ${members.length}</div><div class="metric-sub">no outstanding dues</div></div>
-    <div class="metric"><div class="metric-label">Advance paid</div><div class="metric-val" style="color:#185FA5;">MVR ${Math.round(advance).toLocaleString()}</div><div class="metric-sub">payments beyond March</div></div>
   `;
 }
 
@@ -382,11 +403,12 @@ function renderTablePage() {
       <td style="color:var(--text-secondary);font-size:11px;">${m.id}</td>
       <td class="name-col" title="${m.name}">${m.name}</td>
       <td style="text-align:right;" class="paid-tot">MVR ${Math.round(m.duePaid)}</td>
+      <td style="text-align:right;color:${m.fines>0?'#854F0B':'var(--text-tertiary)'};">${m.fines>0?'MVR '+Math.round(m.fines):'—'}</td>
       <td style="text-align:right;" class="${m.arrears>0?'arr':''}">MVR ${Math.round(m.arrears)}</td>
       <td style="text-align:right;" class="${m.advancePaid>0?'adv':''}">${m.advancePaid>0?'MVR '+Math.round(m.advancePaid):'—'}</td>
       <td style="text-align:center;">${statusBadge(m.status)}</td>
     </tr>
-  `).join('') : `<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text-tertiary);">No members match filter.</td></tr>`;
+  `).join('') : `<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--text-tertiary);">No members match filter.</td></tr>`;
   const total = filtered.length;
   document.getElementById('page-info').textContent = total ? `${start+1}–${Math.min(start+PER_PAGE,total)} of ${total}` : '';
 }
