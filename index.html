@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TSSG Membership Payment Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg-primary: #ffffff;
+    --bg-secondary: #f5f5f2;
+    --bg-tertiary: #eeecea;
+    --text-primary: #1a1a18;
+    --text-secondary: #6b6b66;
+    --text-tertiary: #9e9e99;
+    --border-soft: rgba(0,0,0,0.12);
+    --border-med: rgba(0,0,0,0.22);
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --font: system-ui, -apple-system, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg-primary: #1e1e1c; --bg-secondary: #2a2a28; --bg-tertiary: #333331;
+      --text-primary: #f0f0ec; --text-secondary: #a0a09b; --text-tertiary: #6e6e6a;
+      --border-soft: rgba(255,255,255,0.1); --border-med: rgba(255,255,255,0.2);
+    }
+  }
+  body { font-family: var(--font); background: var(--bg-tertiary); color: var(--text-primary); padding: 1.5rem; min-height: 100vh; }
+  .dash { max-width: 1100px; margin: 0 auto; }
+  .header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 10px; }
+  .header-left h1 { font-size: 18px; font-weight: 500; margin-bottom: 4px; }
+  .header-left p { font-size: 13px; color: var(--text-secondary); }
+  .refresh-btn { display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 6px 14px; border: 0.5px solid var(--border-med); border-radius: var(--radius-md); background: var(--bg-primary); color: var(--text-primary); cursor: pointer; white-space: nowrap; }
+  .refresh-btn:hover { background: var(--bg-secondary); }
+  .refresh-btn.spinning .spin-icon { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spin-icon { display: inline-block; font-size: 13px; }
+  .status-bar { font-size: 11px; color: var(--text-tertiary); margin-bottom: 1rem; }
+  .status-bar.error { color: #A32D2D; }
+  .metrics { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; margin-bottom: 1.5rem; }
+  .metric { background: var(--bg-primary); border-radius: var(--radius-lg); border: 0.5px solid var(--border-soft); padding: 14px 16px; }
+  .metric-label { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
+  .metric-val { font-size: 22px; font-weight: 500; }
+  .metric-sub { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
+  .panels { display: grid; grid-template-columns: minmax(0,1.8fr) minmax(0,1fr); gap: 14px; margin-bottom: 1.5rem; }
+  .card { background: var(--bg-primary); border: 0.5px solid var(--border-soft); border-radius: var(--radius-lg); padding: 1rem 1.25rem; }
+  .card-title { font-size: 13px; font-weight: 500; margin-bottom: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
+  th { font-size: 11px; color: var(--text-tertiary); font-weight: 500; text-align: left; padding: 4px 6px 8px; border-bottom: 0.5px solid var(--border-soft); }
+  td { padding: 6px; border-bottom: 0.5px solid var(--border-soft); vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  .badge { display: inline-block; font-size: 10px; font-weight: 500; padding: 2px 7px; border-radius: 99px; }
+  .badge-green { background: #EAF3DE; color: #3B6D11; }
+  .badge-amber { background: #FAEEDA; color: #854F0B; }
+  .badge-red { background: #FCEBEB; color: #A32D2D; }
+  .badge-blue { background: #E6F1FB; color: #185FA5; }
+  .bar-wrap { width: 100%; background: var(--bg-secondary); border-radius: 99px; height: 6px; }
+  .bar-fill { height: 6px; border-radius: 99px; }
+  .month-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  .month-cell { text-align: center; }
+  .month-name { font-size: 9px; color: var(--text-tertiary); margin-bottom: 4px; }
+  .month-circle { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: 500; margin: 0 auto; line-height: 1.2; text-align: center; }
+  .mc-high { background: #C0DD97; color: #27500A; }
+  .mc-mid { background: #FAC775; color: #633806; }
+  .mc-low { background: #F7C1C1; color: #791F1F; }
+  .mc-zero { background: var(--bg-secondary); color: var(--text-tertiary); }
+  .mc-future { background: #E6F1FB; color: #185FA5; }
+  .search-row { display: flex; gap: 8px; margin-bottom: 10px; }
+  .search-row input, .search-row select {
+    font-size: 13px; padding: 6px 10px; border: 0.5px solid var(--border-med);
+    border-radius: var(--radius-md); background: var(--bg-primary); color: var(--text-primary); outline: none;
+  }
+  .search-row input { flex: 1; }
+  .name-col { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .arr { color: #A32D2D; font-weight: 500; }
+  .paid-tot { color: #3B6D11; font-weight: 500; }
+  .adv { color: #185FA5; font-weight: 500; }
+  .pagination { display: flex; gap: 6px; align-items: center; justify-content: flex-end; margin-top: 8px; font-size: 12px; color: var(--text-secondary); }
+  .pagination button { font-size: 12px; padding: 3px 10px; border: 0.5px solid var(--border-med); border-radius: var(--radius-md); background: var(--bg-primary); color: var(--text-primary); cursor: pointer; }
+  .tab-row { display: flex; gap: 2px; margin-bottom: 12px; }
+  .tab { font-size: 12px; padding: 5px 12px; border-radius: var(--radius-md); cursor: pointer; background: none; border: 0.5px solid var(--border-soft); color: var(--text-secondary); }
+  .tab.active { background: var(--bg-secondary); color: var(--text-primary); font-weight: 500; border-color: var(--border-med); }
+  .heat-table { width: 100%; border-collapse: collapse; font-size: 10px; table-layout: fixed; }
+  .heat-table th { font-size: 10px; color: var(--text-tertiary); padding: 2px 2px 6px; text-align: center; font-weight: 500; }
+  .heat-table td { padding: 2px; text-align: center; }
+  .heat-cell { width: 100%; border-radius: 3px; font-size: 9px; display: flex; align-items: center; justify-content: center; height: 18px; }
+  .hc-paid { background: #C0DD97; color: #27500A; }
+  .hc-zero { background: var(--bg-secondary); }
+  .hc-partial { background: #FAC775; color: #633806; }
+  .hc-advance { background: #B5D4F4; color: #0C447C; }
+  .heat-name { text-align: left !important; font-size: 10px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-left: 4px !important; }
+  .legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11px; color: var(--text-secondary); margin-bottom: 10px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 2px; display: inline-block; margin-right: 4px; vertical-align: middle; }
+  .skeleton { background: var(--bg-secondary); border-radius: 4px; animation: pulse 1.5s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+  .loading-state { padding: 3rem; text-align: center; color: var(--text-tertiary); font-size: 13px; }
+  @media (max-width: 700px) {
+    .metrics { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    .panels { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="dash">
+
+  <div class="header">
+    <div class="header-left">
+      <h1>TSSG Rover Crew — Membership Payments</h1>
+      <p>Dec 2024 – Dec 2025 &nbsp;·&nbsp; MVR 30 / member / month &nbsp;·&nbsp; Due up to: <strong id="due-label">Mar 2025</strong></p>
+    </div>
+    <button class="refresh-btn" onclick="loadData()">
+      <span class="spin-icon" id="spin-icon">↻</span> Refresh from sheet
+    </button>
+  </div>
+
+  <div class="status-bar" id="status-bar">Loading data from Google Sheets...</div>
+  <div class="metrics" id="metrics"><div class="loading-state">Fetching payments...</div></div>
+
+  <div class="tab-row">
+    <button class="tab active" onclick="showTab('members',event)">Member ledger</button>
+    <button class="tab" onclick="showTab('heatmap',event)">Payment heatmap</button>
+    <button class="tab" onclick="showTab('monthly',event)">Monthly summary</button>
+  </div>
+
+  <div id="tab-members" class="panels">
+    <div class="card">
+      <div class="card-title">Member payment ledger</div>
+      <div class="search-row">
+        <input type="text" id="search" placeholder="Search member..." oninput="renderTable()" />
+        <select id="filter" onchange="renderTable()">
+          <option value="all">All members</option>
+          <option value="clear">Cleared</option>
+          <option value="partial">Partially paid</option>
+          <option value="arrears">In arrears</option>
+          <option value="advance">Advance paid</option>
+          <option value="never">Never paid</option>
+        </select>
+      </div>
+      <table>
+        <thead><tr>
+          <th style="width:18%">ID</th>
+          <th style="width:28%">Name</th>
+          <th style="width:13%;text-align:right">Paid (due)</th>
+          <th style="width:13%;text-align:right">Arrears</th>
+          <th style="width:13%;text-align:right">Advance</th>
+          <th style="width:15%;text-align:center">Status</th>
+        </tr></thead>
+        <tbody id="tbl-body"><tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text-tertiary);">Loading...</td></tr></tbody>
+      </table>
+      <div class="pagination">
+        <span id="page-info"></span>
+        <button onclick="changePage(-1)">&#8592;</button>
+        <button onclick="changePage(1)">&#8594;</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Collection by month</div>
+      <div class="month-grid" id="month-grid"></div>
+      <div style="margin-top:10px;font-size:10px;color:var(--text-tertiary);">Blue = future / advance months</div>
+      <div style="margin-top:14px;">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-tertiary);margin-bottom:8px;">Top contributors</div>
+        <div id="top-members"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-heatmap" style="display:none;" class="card">
+    <div class="card-title">Payment heatmap — all members</div>
+    <div class="legend">
+      <span><span class="legend-dot" style="background:#C0DD97;"></span>Paid (due)</span>
+      <span><span class="legend-dot" style="background:#B5D4F4;"></span>Advance</span>
+      <span><span class="legend-dot" style="background:#FAC775;"></span>Partial</span>
+      <span><span class="legend-dot" style="background:var(--bg-secondary);border:0.5px solid var(--border-soft);"></span>Unpaid</span>
+    </div>
+    <div style="overflow-x:auto;"><table class="heat-table" id="heat-table"></table></div>
+  </div>
+
+  <div id="tab-monthly" style="display:none;" class="card">
+    <div class="card-title">Monthly collection overview</div>
+    <div style="position:relative;height:220px;width:100%;margin-bottom:1.5rem;"><canvas id="barChart"></canvas></div>
+    <table>
+      <thead><tr>
+        <th>Month</th>
+        <th style="text-align:right">Collected</th>
+        <th style="text-align:right">Expected</th>
+        <th style="text-align:right">Rate</th>
+        <th>Bar</th>
+      </tr></thead>
+      <tbody id="monthly-tbl"></tbody>
+    </table>
+  </div>
+
+</div>
+
+<script>
+const SHEET_ID  = '16sAn2F40Kn0IIZQzwupDqLoRezzaKoS7ZvkIYNC_jBo';
+const API_KEY   = 'AIzaSyASgzYSXzwJwRT2UzvRMr8Djks3EjL8S5Q';
+const SHEET_TAB = 'Payments';
+const FEE       = 30;
+
+const MONTH_LABELS = ['Dec 2024','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec 2025'];
+const SHORT        = ['Dec','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec2'];
+
+// Today: 31 March 2025 — due months are Dec(0) Jan(1) Feb(2) Mar(3)
+const TODAY_MONTH_IDX = 3;
+
+// Known member roster (so members with zero payments still appear)
+const ROSTER = [
+  {id:'TS-R001',name:'Mohamed Suraij Abdulla'},
+  {id:'TS-R002',name:'Hussain Yameen Ali'},
+  {id:'TS-R003',name:'Fathmath Shamha'},
+  {id:'TS-R004',name:'Ahmed Rishaan'},
+  {id:'TS-R005',name:'Mohamed Alson Ali'},
+  {id:'TS-R006',name:'Ahmed Zeeshan Mohamed'},
+  {id:'TS-R007',name:'Ali Hafiz Hussain'},
+  {id:'TS-R008',name:'Dhaoodh Jauhary'},
+  {id:'TS-R009',name:'Fathmath Saara Mohamed'},
+  {id:'TS-R010',name:'Fathmath Hanan Abdul Gafoor'},
+  {id:'TS-R011',name:'Juraij Bin Abdulla'},
+  {id:'TS-R012',name:'Aminath Libaa Shahid'},
+  {id:'TS-R013',name:'Maashy Mohamed Bilal'},
+  {id:'TS-R014',name:'Owais Bin Abdulla'},
+  {id:'TS-R015',name:'Abdulla Alsan Shahid'},
+  {id:'TS-R016',name:'Abdulla Ayaan'},
+  {id:'TS-R017',name:'Ahmed Ahil Khaleel'},
+  {id:'TS-R018',name:'Ahmed Maaish Abdulla'},
+  {id:'TS-R019',name:'Ahmed Rashan Mohamed'},
+  {id:'TS-R020',name:'Aman Mauroof'},
+  {id:'TS-R021',name:'Ayani Lamaan'},
+  {id:'TS-R022',name:'Farooh Firag'},
+  {id:'TS-R023',name:"Hawwa Ish'haa"},
+  {id:'TS-R024',name:'Ibrahim Husaan'},
+  {id:'TS-R025',name:'Mariyam Azka Mohamed'},
+  {id:'TS-R026',name:'Mariyam Hidhayath Nazeem'},
+  {id:'TS-R027',name:'Mohamed Arham Miuraj'},
+  {id:'TS-R028',name:'Mohamed Saleem'},
+  {id:'TS-R029',name:'Shasha Binth Shihad'},
+  {id:'TS-R030',name:'Yoonus bin Ali bin Umar'},
+  {id:'TS-R031',name:'Ahmed Sadhin Ali'},
+  {id:'TS-R032',name:'Ahmed Naahil Fazeel'},
+  {id:'TS-R033',name:'Yafiu'},
+  {id:'TS-R034',name:'Yusuf Meekail'},
+];
+
+let members = [];
+let page = 0;
+const PER_PAGE = 10;
+let chartInstance = null;
+
+function monthIndex(label) {
+  return MONTH_LABELS.findIndex(m => m.trim().toLowerCase() === label.trim().toLowerCase());
+}
+
+function parseCSV(text) {
+  const rows = [];
+  const lines = text.split('\n');
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    const cols = [];
+    let cur = '', inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') { inQ = !inQ; }
+      else if (ch === ',' && !inQ) { cols.push(cur); cur = ''; }
+      else { cur += ch; }
+    }
+    cols.push(cur);
+    rows.push(cols.map(c => c.trim().replace(/^"|"$/g, '')));
+  }
+  return rows;
+}
+
+async function loadData() {
+  const btn = document.querySelector('.refresh-btn');
+  btn.classList.add('spinning');
+  document.getElementById('status-bar').textContent = 'Fetching from Google Sheets...';
+  document.getElementById('status-bar').className = 'status-bar';
+
+  try {
+    // Use CSV export URL — works from local file:// without CORS issues
+    const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SHEET_TAB)}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Could not reach Google Sheets (HTTP ${res.status}). Check your internet connection and that the sheet is shared publicly.`);
+    const text = await res.text();
+    if (!text || text.startsWith('<!')) throw new Error('Sheet returned an error page. Make sure sharing is set to "Anyone with the link can view".');
+
+    const rows = parseCSV(text);
+    if (rows.length < 2) throw new Error('Sheet appears empty — make sure the tab is named "Payments" and has data.');
+
+    // rows[0] = headers, rows[1+] = data
+    const payments = rows.slice(1).map(r => ({
+      id: (r[0]||'').trim(),
+      name: (r[1]||'').trim(),
+      month: (r[2]||'').trim(),
+      amount: parseFloat(r[3]) || 0
+    })).filter(p => p.id && p.month && p.amount > 0);
+
+    // Build per-member pay arrays
+    members = ROSTER.map(m => {
+      const pay = new Array(MONTH_LABELS.length).fill(0);
+      payments.filter(p => p.id === m.id).forEach(p => {
+        const idx = monthIndex(p.month);
+        if (idx >= 0) pay[idx] += p.amount;
+      });
+      const duePaid     = pay.slice(0, TODAY_MONTH_IDX + 1).reduce((a,b)=>a+b,0);
+      const advancePaid = pay.slice(TODAY_MONTH_IDX + 1).reduce((a,b)=>a+b,0);
+      const totalPaid   = pay.reduce((a,b)=>a+b,0);
+      const dueExpected = FEE * (TODAY_MONTH_IDX + 1);
+      const arrears     = Math.max(0, dueExpected - duePaid);
+      const cleared     = arrears === 0;
+      let status;
+      if (totalPaid === 0)            status = 'never';
+      else if (cleared && advancePaid > 0) status = 'advance';
+      else if (cleared)               status = 'clear';
+      else if (duePaid > 0)           status = 'partial';
+      else                            status = 'arrears';
+      return {...m, pay, duePaid, advancePaid, totalPaid, arrears, cleared, status};
+    });
+
+    const now = new Date();
+    document.getElementById('status-bar').textContent =
+      `Last updated: ${now.toLocaleTimeString()} · ${payments.length} payment records · ${members.length} members`;
+
+    renderAll();
+  } catch(e) {
+    document.getElementById('status-bar').textContent = 'Error: ' + e.message;
+    document.getElementById('status-bar').className = 'status-bar error';
+    console.error(e);
+  }
+  btn.classList.remove('spinning');
+}
+
+function renderAll() {
+  renderMetrics();
+  renderTable();
+  renderMonthGrid();
+  renderHeatmap();
+  renderMonthlyTab();
+}
+
+function renderMetrics() {
+  const dueExp   = members.length * FEE * (TODAY_MONTH_IDX + 1);
+  const dueColl  = members.reduce((a,m)=>a+m.duePaid,0);
+  const arrears  = members.reduce((a,m)=>a+m.arrears,0);
+  const advance  = members.reduce((a,m)=>a+m.advancePaid,0);
+  const rate     = Math.round(dueColl/dueExp*100);
+  const cleared  = members.filter(m=>m.cleared).length;
+  document.getElementById('metrics').innerHTML = `
+    <div class="metric"><div class="metric-label">Collected (due)</div><div class="metric-val" style="color:#3B6D11;">MVR ${Math.round(dueColl).toLocaleString()}</div><div class="metric-sub">of MVR ${dueExp.toLocaleString()} due (Dec–Mar)</div></div>
+    <div class="metric"><div class="metric-label">Total arrears</div><div class="metric-val" style="color:#A32D2D;">MVR ${Math.round(arrears).toLocaleString()}</div><div class="metric-sub">${rate}% collection rate</div></div>
+    <div class="metric"><div class="metric-label">Members cleared</div><div class="metric-val" style="color:#3B6D11;">${cleared} / ${members.length}</div><div class="metric-sub">no outstanding dues</div></div>
+    <div class="metric"><div class="metric-label">Advance paid</div><div class="metric-val" style="color:#185FA5;">MVR ${Math.round(advance).toLocaleString()}</div><div class="metric-sub">payments beyond March</div></div>
+  `;
+}
+
+function statusBadge(s) {
+  const map = { clear:['badge-green','Cleared'], advance:['badge-blue','Advance'], partial:['badge-amber','Partial'], arrears:['badge-red','In arrears'], never:['badge-red','Never paid'] };
+  const [cls, label] = map[s]||['',''];
+  return `<span class="badge ${cls}">${label}</span>`;
+}
+
+function getFiltered() {
+  const q = (document.getElementById('search').value||'').toLowerCase();
+  const f = document.getElementById('filter').value;
+  return members.filter(m => {
+    const nm = m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q);
+    const st = f==='all' || m.status===f || (f==='arrears' && m.status==='never');
+    return nm && st;
+  });
+}
+
+function renderTable() { page = 0; renderTablePage(); }
+
+function renderTablePage() {
+  const filtered = getFiltered();
+  const start = page * PER_PAGE;
+  const slice = filtered.slice(start, start + PER_PAGE);
+  document.getElementById('tbl-body').innerHTML = slice.length ? slice.map(m => `
+    <tr>
+      <td style="color:var(--text-secondary);font-size:11px;">${m.id}</td>
+      <td class="name-col" title="${m.name}">${m.name}</td>
+      <td style="text-align:right;" class="paid-tot">MVR ${Math.round(m.duePaid)}</td>
+      <td style="text-align:right;" class="${m.arrears>0?'arr':''}">MVR ${Math.round(m.arrears)}</td>
+      <td style="text-align:right;" class="${m.advancePaid>0?'adv':''}">${m.advancePaid>0?'MVR '+Math.round(m.advancePaid):'—'}</td>
+      <td style="text-align:center;">${statusBadge(m.status)}</td>
+    </tr>
+  `).join('') : `<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text-tertiary);">No members match filter.</td></tr>`;
+  const total = filtered.length;
+  document.getElementById('page-info').textContent = total ? `${start+1}–${Math.min(start+PER_PAGE,total)} of ${total}` : '';
+}
+
+function changePage(dir) {
+  const pages = Math.ceil(getFiltered().length / PER_PAGE);
+  page = Math.max(0, Math.min(pages-1, page+dir));
+  renderTablePage();
+}
+
+function renderMonthGrid() {
+  const collected = MONTH_LABELS.map((_,i) => members.reduce((a,m)=>a+m.pay[i],0));
+  document.getElementById('month-grid').innerHTML = SHORT.map((mo,i) => {
+    const v = collected[i], isFuture = i > TODAY_MONTH_IDX;
+    const cls = isFuture ? 'mc-future' : v>=200?'mc-high':v>=100?'mc-mid':v>0?'mc-low':'mc-zero';
+    return `<div class="month-cell"><div class="month-name">${mo}</div><div class="month-circle ${cls}">${Math.round(v)||'0'}</div></div>`;
+  }).join('');
+
+  const sorted = [...members].sort((a,b)=>b.totalPaid-a.totalPaid).slice(0,5);
+  const maxPaid = sorted[0]?.totalPaid||1;
+  document.getElementById('top-members').innerHTML = sorted.map(m => `
+    <div style="margin-bottom:8px;">
+      <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px;">
+        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:130px;">${m.name.split(' ').slice(0,2).join(' ')}</span>
+        <span style="color:var(--text-secondary);margin-left:4px;">MVR ${Math.round(m.totalPaid)}</span>
+      </div>
+      <div class="bar-wrap"><div class="bar-fill" style="width:${Math.round(m.totalPaid/maxPaid*100)}%;background:#639922;"></div></div>
+    </div>
+  `).join('');
+}
+
+function renderHeatmap() {
+  document.getElementById('heat-table').innerHTML = `
+    <thead><tr>
+      <th style="text-align:left;padding-left:4px;">Member</th>
+      ${SHORT.map((m,i)=>`<th style="${i>TODAY_MONTH_IDX?'color:#185FA5;':''}" title="${MONTH_LABELS[i]}">${m}</th>`).join('')}
+      <th>Arrears</th>
+    </tr></thead>
+    <tbody>${members.map(m=>`
+      <tr>
+        <td class="heat-name" title="${m.name}">${m.name.split(' ').slice(0,2).join(' ')}</td>
+        ${m.pay.map((v,i)=>{
+          const isFut = i>TODAY_MONTH_IDX;
+          const cls = v>0&&isFut?'hc-advance':v>=30?'hc-paid':v>0?'hc-partial':'hc-zero';
+          return `<td><div class="heat-cell ${cls}">${v>0?Math.round(v):''}</div></td>`;
+        }).join('')}
+        <td style="text-align:center;font-size:10px;font-weight:500;color:${m.arrears>0?'#A32D2D':'#3B6D11'};">${m.arrears>0?'MVR '+Math.round(m.arrears):'✓'}</td>
+      </tr>
+    `).join('')}</tbody>
+  `;
+}
+
+function renderMonthlyTab() {
+  const collected = MONTH_LABELS.map((_,i)=>members.reduce((a,m)=>a+m.pay[i],0));
+  const exp = members.length * FEE;
+  document.getElementById('monthly-tbl').innerHTML = MONTH_LABELS.map((mo,i)=>{
+    const c = collected[i], isFut = i>TODAY_MONTH_IDX, rate = Math.round(c/exp*100);
+    return `<tr>
+      <td>${mo}${isFut?'<span style="font-size:10px;color:#185FA5;margin-left:4px;">advance</span>':''}</td>
+      <td style="text-align:right;font-weight:500;color:${isFut?'#185FA5':'#3B6D11'};">MVR ${Math.round(c)}</td>
+      <td style="text-align:right;color:var(--text-secondary);">${isFut?'—':'MVR '+exp}</td>
+      <td style="text-align:right;color:${isFut?'#185FA5':rate<30?'#A32D2D':rate<60?'#854F0B':'#3B6D11'};">${isFut?'—':rate+'%'}</td>
+      <td style="padding:6px;">${isFut
+        ?'<span style="font-size:10px;color:#185FA5;">advance only</span>'
+        :`<div class="bar-wrap"><div class="bar-fill" style="width:${rate}%;background:${rate<30?'#F09595':rate<60?'#FAC775':'#97C459'};"></div></div>`}
+      </td>
+    </tr>`;
+  }).join('');
+
+  if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+  const ctx = document.getElementById('barChart');
+  if (!ctx) return;
+  chartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: SHORT,
+      datasets: [
+        { label: 'Due & collected', data: MONTH_LABELS.map((_,i)=>i<=TODAY_MONTH_IDX?Math.round(members.reduce((a,m)=>a+m.pay[i],0)):0), backgroundColor: '#97C459' },
+        { label: 'Advance paid',    data: MONTH_LABELS.map((_,i)=>i>TODAY_MONTH_IDX?Math.round(members.reduce((a,m)=>a+m.pay[i],0)):0), backgroundColor: '#85B7EB' },
+        { label: 'Uncollected',     data: MONTH_LABELS.map((_,i)=>i<=TODAY_MONTH_IDX?Math.max(0,members.length*FEE-members.reduce((a,m)=>a+m.pay[i],0)):0), backgroundColor: '#F7C1C1' },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { stacked: true, ticks: { autoSkip: false, maxRotation: 45, font:{size:10} }, grid:{display:false} },
+        y: { stacked: true, ticks: { font:{size:10}, callback: v=>'MVR '+v }, grid:{color:'rgba(0,0,0,0.05)'} }
+      }
+    }
+  });
+}
+
+function showTab(tab, e) {
+  document.getElementById('tab-members').style.display  = tab==='members'?'grid':'none';
+  document.getElementById('tab-heatmap').style.display  = tab==='heatmap'?'block':'none';
+  document.getElementById('tab-monthly').style.display  = tab==='monthly'?'block':'none';
+  document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
+  if(e&&e.target) e.target.classList.add('active');
+}
+
+loadData();
+</script>
+</body>
+</html>
