@@ -383,7 +383,9 @@ async function loadData() {
   document.getElementById('status-bar').className = 'status-bar';
   document.getElementById('sync-dot').style.background = '#EF9F27';
   try {
-    const [payRows, memRows] = await Promise.all([fetchCSV('Payments'), fetchCSV('Members')]);
+    // Fetch sequentially for better error reporting
+    const payRows = await fetchCSV('Payments');
+    const memRows = await fetchCSV('Members');
 
     // Build member meta from Members tab
     memRows.slice(1).forEach(r => {
