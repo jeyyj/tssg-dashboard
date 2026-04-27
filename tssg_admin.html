@@ -680,10 +680,17 @@ function loadAll(){
       else if(duePaid>0)status='partial';
       else status='arrears';
       if(onPause&&cleared)status='pause';
-      // consecutive missed from fine start
-      var consec=0,maxC=0;
-      for(var i=FINE_START;i<=DUE_IDX;i++){if(!paused[i]&&pay[i]<FEE){consec++;if(consec>maxC)maxC=consec;}else{consec=0;}}
-      return {id:id,name:m.name||id,role:m.role,email:m.email,phone:m.phone,status:status,pay:pay,duePaid:duePaid,advPaid:advPaid,totalPaid:totalPaid,fineAmt:fineAmt,arrears:arrears,cleared:cleared,paused:paused,maxConsec:maxC};
+      // Track current consecutive streak (resets on payment OR after fine trigger)
+      // This reflects current streak since last payment or last fine
+      var curStreak=0;
+      var streak2=0;
+      for(var i=FINE_START;i<=DUE_IDX;i++){
+        if(paused[i]){curStreak=0;streak2=0;continue;}
+        if(pay[i]<FEE){streak2++;curStreak++;if(streak2===3){streak2=0;}} // streak2 resets after fine, curStreak keeps going
+        else{curStreak=0;streak2=0;}
+      }
+      // curStreak = months missed in a row right now (for risk display)
+      return {id:id,name:m.name||id,role:m.role,email:m.email,phone:m.phone,status:status,pay:pay,duePaid:duePaid,advPaid:advPaid,totalPaid:totalPaid,fineAmt:fineAmt,arrears:arrears,cleared:cleared,paused:paused,maxConsec:curStreak};
     }).filter(function(m){return m.status!=='removed';});
 
     // Parse ledger
@@ -968,7 +975,7 @@ function renderFines(){
   var h='';
   if(!atRiskList.length){h='<tr><td colspan="5" style="text-align:center;padding:1.5rem;color:var(--tm)">No members at risk</td></tr>';}
   else atRiskList.forEach(function(m){
-    var risk=m.maxConsec>=4?['bg-red','High']:['bg-amber','Medium'];
+    var risk=m.maxConsec>=2?['bg-red','High']:['bg-amber','Medium'];
     h+='<tr><td style="color:var(--tm);font-size:10px">'+m.id+'</td><td class="nc">'+m.name+'</td>';
     h+='<td style="text-align:center">'+m.maxConsec+' months</td>';
     h+='<td style="text-align:center;color:var(--amber);font-weight:500">MVR 30</td>';
