@@ -727,21 +727,18 @@ function loadAll(){
       reconData.push({month:r[0],bankBal:parseFloat(r[1])||0,notes:r[2]||''});
     }
 
-    // Sparkline data — running balance by month
+    // Build monthly running balance from MasterLedger txns only
+    var mIncArr=new Array(13).fill(0), mExpArr=new Array(13).fill(0);
+    txns.forEach(function(t){
+      var mi=parseMonthFromDate(t.date);
+      if(mi>=0){mIncArr[mi]+=t.inc; mExpArr[mi]+=t.exp;}
+    });
     sparkData=[];
-    var MSTARTS=['2025-12','2026-01','2026-02','2026-03','2026-04','2026-05','2026-06','2026-07','2026-08','2026-09','2026-10','2026-11','2026-12'];
-    for(var mi=0;mi<13;mi++){
-      var mInc=0,mExp=0;
-      txns.forEach(function(t){if(t.date&&t.date.substring(3,10).split('/').reverse().join('-').substring(0,7)===MSTARTS[mi]||parseMonthFromDate(t.date)===mi){mInc+=t.inc;mExp+=t.exp;}});
-      sparkData.push(0);
+    var runningBal=0;
+    for(var si=0;si<13;si++){
+      runningBal+=mIncArr[si]-mExpArr[si];
+      sparkData.push(Math.round(runningBal));
     }
-    // Just use running balance from txns
-    var bal=0,mBals=new Array(13).fill(0);
-    txns.forEach(function(t){bal+=t.inc-t.exp;var mi=parseMonthFromDate(t.date);if(mi>=0)mBals[mi]=bal;});
-    // forward fill
-    var last=0;
-    for(var i=0;i<13;i++){if(mBals[i]!==0)last=mBals[i];else mBals[i]=last;}
-    sparkData=mBals;
 
     document.getElementById('sdot').style.background='#3B6D11';
     document.getElementById('slabel').textContent='Synced '+new Date().toLocaleTimeString();
@@ -1011,14 +1008,14 @@ function renderFund(){
   txns.forEach(function(t){var mi=parseMonthFromDate(t.date);if(mi>=0){mInc[mi]+=t.inc;mExp[mi]+=t.exp;}});
   if(charts.ie)charts.ie.destroy();
   charts.ie=new Chart(document.getElementById('ieChart'),{type:'bar',data:{labels:SHORT,datasets:[
-    {label:'Income',data:mInc.map(function(v){return Math.round(v);}),backgroundColor:'#3B6D11'},
-    {label:'Expenses',data:mExp.map(function(v){return Math.round(v);}),backgroundColor:'#F09595'},
-  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9},autoSkip:false,maxRotation:45},grid:{display:false}},y:{ticks:{font:{size:9},callback:function(v){return 'MVR '+v;}},grid:{color:'rgba(0,0,0,0.05)'}}}}});
+    {label:'Income',data:mInc.map(function(v){return Math.round(v);}),backgroundColor:'rgba(59,109,17,0.8)',borderRadius:3},
+    {label:'Expenses',data:mExp.map(function(v){return Math.round(v);}),backgroundColor:'rgba(240,149,149,0.8)',borderRadius:3},
+  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,position:'top',labels:{font:{size:10},boxWidth:12,padding:12}}},scales:{x:{ticks:{font:{size:9},autoSkip:false,maxRotation:45},grid:{display:false}},y:{beginAtZero:true,ticks:{font:{size:9},callback:function(v){return 'MVR '+v;}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
 
   if(charts.bal)charts.bal.destroy();
   charts.bal=new Chart(document.getElementById('balChart'),{type:'line',data:{labels:SHORT,datasets:[
-    {data:sparkData,borderColor:'var(--yellow)',backgroundColor:'rgba(245,200,66,0.07)',fill:true,tension:0.3,pointRadius:3,pointBackgroundColor:'var(--yellow)'}
-  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9},autoSkip:false,maxRotation:45},grid:{display:false}},y:{ticks:{font:{size:9},callback:function(v){return 'MVR '+v;}},grid:{color:'rgba(0,0,0,0.05)'}}}}});
+    {label:'Fund balance',data:sparkData,borderColor:'#F5C842',backgroundColor:'rgba(245,200,66,0.08)',fill:true,tension:0.3,pointRadius:3,pointBackgroundColor:'#F5C842',borderWidth:2}
+  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9},autoSkip:false,maxRotation:45},grid:{display:false}},y:{beginAtZero:true,ticks:{font:{size:9},callback:function(v){return 'MVR '+v;}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
 
   // Category breakdowns
   var incCats={},expCats={};
@@ -1065,15 +1062,27 @@ function renderCashFlow(){
   for(var i=0;i<13;i++){running+=mInc[i]-mExp[i];mBals.push(running);}
 
   if(charts.cf)charts.cf.destroy();
-  charts.cf=new Chart(document.getElementById('cfChart'),{type:'bar',data:{labels:SHORT,datasets:[
-    {label:'Income',data:mInc.map(function(v){return Math.round(v);}),backgroundColor:'#3B6D11',stack:'a'},
-    {label:'Expenses',data:mExp.map(function(v){return -Math.round(v);}),backgroundColor:'#F09595',stack:'a'},
-    {type:'line',label:'Balance',data:mBals.map(function(v){return Math.round(v);}),borderColor:'var(--yellow)',backgroundColor:'transparent',pointRadius:4,pointBackgroundColor:'var(--yellow)',tension:0.3,yAxisID:'y2'},
-  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{
-    x:{ticks:{font:{size:9},autoSkip:false,maxRotation:45},grid:{display:false}},
-    y:{stacked:true,ticks:{font:{size:9},callback:function(v){return 'MVR '+v;}},grid:{color:'rgba(0,0,0,0.05)'}},
-    y2:{position:'right',ticks:{font:{size:9},callback:function(v){return 'MVR '+v;}},grid:{display:false}}
-  }}});
+  // Use grouped bars for income/expense and a line for balance on same scale
+  // All on one Y axis to avoid visual confusion
+  charts.cf=new Chart(document.getElementById('cfChart'),{
+    type:'bar',
+    data:{
+      labels:SHORT,
+      datasets:[
+        {label:'Income',data:mInc.map(function(v){return Math.round(v);}),backgroundColor:'rgba(59,109,17,0.8)',borderRadius:3,order:2},
+        {label:'Expenses',data:mExp.map(function(v){return Math.round(v);}),backgroundColor:'rgba(240,149,149,0.8)',borderRadius:3,order:2},
+        {type:'line',label:'Balance',data:mBals.map(function(v){return Math.round(v);}),borderColor:'#F5C842',backgroundColor:'transparent',pointRadius:4,pointBackgroundColor:'#F5C842',tension:0.3,order:1,borderWidth:2},
+      ]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:true,position:'top',labels:{font:{size:10},boxWidth:12,padding:12}}},
+      scales:{
+        x:{ticks:{font:{size:9},autoSkip:false,maxRotation:45},grid:{display:false}},
+        y:{ticks:{font:{size:9},callback:function(v){return 'MVR '+v;}},grid:{color:'rgba(0,0,0,0.04)'},beginAtZero:true}
+      }
+    }
+  });
 
   var h='',openBal=0;
   for(var i=0;i<13;i++){

@@ -290,8 +290,8 @@ function monthIdx(label) {
 }
 
 function fetchCSV(tab) {
-  var url = 'https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/gviz/tq?tqx=out:csv&sheet=' + encodeURIComponent(tab);
-  return fetch(url).then(function(res) {
+  var url = 'https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/gviz/tq?tqx=out:csv&sheet=' + encodeURIComponent(tab) + '&t=' + Date.now();
+  return fetch(url, {cache:'no-store'}).then(function(res) {
     if(!res.ok) throw new Error('HTTP ' + res.status + ' loading ' + tab);
     return res.text();
   }).then(function(text) {
