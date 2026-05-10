@@ -253,12 +253,6 @@ else if(now >= new Date('2026-02-01')) DUE_IDX=2;
 else if(now >= new Date('2026-01-01')) DUE_IDX=1;
 else DUE_IDX=0;
 
-// Members TS-R034 and above were investitured May 2026; their fees start at index 4
-function memberStartIdx(id) {
-  var n = parseInt(id.replace('TS-R',''), 10);
-  return (!isNaN(n) && n >= 35) ? 4 : 0;
-}
-
 var GRACE_END = new Date('2026-05-31');
 var GRACE_ACTIVE = now <= GRACE_END;
 var GRACE_DAYS = Math.max(0, Math.ceil((GRACE_END - now)/(1000*60*60*24)));
@@ -379,10 +373,8 @@ function loadData() {
         }
       }
 
-      var startIdx=memberStartIdx(id);
-
       var duePaid=0;
-      for(var i=startIdx;i<=DUE_IDX;i++) duePaid+=pay[i];
+      for(var i=0;i<=DUE_IDX;i++) duePaid+=pay[i];
 
       var advPaid=0;
       for(var i=DUE_IDX+1;i<13;i++) advPaid+=pay[i];
@@ -392,11 +384,11 @@ function loadData() {
 
       // Expected = non-paused due months * FEE
       var dueExp=0;
-      for(var i=startIdx;i<=DUE_IDX;i++) { if(!paused[i]) dueExp+=FEE; }
+      for(var i=0;i<=DUE_IDX;i++) { if(!paused[i]) dueExp+=FEE; }
 
       // Fines - rolling streak from FINE_START
       var streak=0, fines=0;
-      for(var i=Math.max(FINE_START,startIdx);i<=DUE_IDX;i++) {
+      for(var i=FINE_START;i<=DUE_IDX;i++) {
         if(paused[i]){streak=0;continue;}
         if(pay[i]<FEE){streak++;if(streak===3){fines++;streak=0;}}
         else{streak=0;}
@@ -506,7 +498,7 @@ function renderMetrics(){
   var dueExp=0;
   for(var i=0;i<members.length;i++){
     if(members[i].status!=='pause'){
-      for(var j=memberStartIdx(members[i].id);j<=DUE_IDX;j++){
+      for(var j=0;j<=DUE_IDX;j++){
         if(!members[i].paused[j]) dueExp+=FEE;
       }
     }
@@ -562,16 +554,14 @@ function renderHeatmap(){
   for(var j=0;j<members.length;j++){
     var m=members[j];
     body+='<tr><td class="hn" title="'+m.name+'">'+m.name.split(' ').slice(0,2).join(' ')+'</td>';
-    var si=memberStartIdx(m.id);
     for(var i=0;i<13;i++){
-      var v=m.pay[i], fut=i>DUE_IDX, paused=m.paused[i], na=i<si;
+      var v=m.pay[i], fut=i>DUE_IDX, paused=m.paused[i];
       var cls='hc-zero';
-      if(na) cls='hc-pause';
-      else if(paused&&v===0) cls='hc-pause';
+      if(paused&&v===0) cls='hc-pause';
       else if(v>0&&fut) cls='hc-adv';
       else if(v>=30) cls='hc-paid';
       else if(v>0) cls='hc-part';
-      body+='<td><div class="hc '+cls+'">'+(na?'':v>0?Math.round(v):paused?'P':'')+'</div></td>';
+      body+='<td><div class="hc '+cls+'">'+(v>0?Math.round(v):paused?'P':'')+'</div></td>';
     }
     var arr=m.arrears;
     body+='<td style="text-align:center;font-size:9px;font-weight:600;color:'+(arr>0?'var(--red)':'var(--green)')+'">'+( arr>0?'MVR '+Math.round(arr):'&#10003;')+'</td>';
