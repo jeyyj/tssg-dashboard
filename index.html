@@ -290,8 +290,8 @@ function monthIdx(label) {
 }
 
 function fetchCSV(tab) {
-  var url = 'https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/gviz/tq?tqx=out:csv&sheet=' + encodeURIComponent(tab);
-  return fetch(url).then(function(res) {
+  var url = 'https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/gviz/tq?tqx=out:csv&sheet=' + encodeURIComponent(tab) + '&t=' + Date.now();
+  return fetch(url, {cache:'no-store'}).then(function(res) {
     if(!res.ok) throw new Error('HTTP ' + res.status + ' loading ' + tab);
     return res.text();
   }).then(function(text) {
@@ -382,13 +382,17 @@ function loadData() {
       var totalPaid=0;
       for(var i=0;i<13;i++) totalPaid+=pay[i];
 
+      // Members TS-R035+ joined May 2026; owed months start at index 5
+      var idN=parseInt(id.replace('TS-R',''),10);
+      var feeStart=(!isNaN(idN)&&idN>=35)?5:0;
+
       // Expected = non-paused due months * FEE
       var dueExp=0;
-      for(var i=0;i<=DUE_IDX;i++) { if(!paused[i]) dueExp+=FEE; }
+      for(var i=feeStart;i<=DUE_IDX;i++) { if(!paused[i]) dueExp+=FEE; }
 
       // Fines - rolling streak from FINE_START
       var streak=0, fines=0;
-      for(var i=FINE_START;i<=DUE_IDX;i++) {
+      for(var i=Math.max(FINE_START,feeStart);i<=DUE_IDX;i++) {
         if(paused[i]){streak=0;continue;}
         if(pay[i]<FEE){streak++;if(streak===3){fines++;streak=0;}}
         else{streak=0;}
