@@ -256,7 +256,7 @@ else DUE_IDX=0;
 // Members TS-R034 and above were investitured May 2026; their fees start at index 4
 function memberStartIdx(id) {
   var n = parseInt(id.replace('TS-R',''), 10);
-  return (!isNaN(n) && n >= 34) ? 4 : 0;
+  return (!isNaN(n) && n >= 35) ? 4 : 0;
 }
 
 var GRACE_END = new Date('2026-05-31');
@@ -562,14 +562,16 @@ function renderHeatmap(){
   for(var j=0;j<members.length;j++){
     var m=members[j];
     body+='<tr><td class="hn" title="'+m.name+'">'+m.name.split(' ').slice(0,2).join(' ')+'</td>';
+    var si=memberStartIdx(m.id);
     for(var i=0;i<13;i++){
-      var v=m.pay[i], fut=i>DUE_IDX, paused=m.paused[i];
+      var v=m.pay[i], fut=i>DUE_IDX, paused=m.paused[i], na=i<si;
       var cls='hc-zero';
-      if(paused&&v===0) cls='hc-pause';
+      if(na) cls='hc-pause';
+      else if(paused&&v===0) cls='hc-pause';
       else if(v>0&&fut) cls='hc-adv';
       else if(v>=30) cls='hc-paid';
       else if(v>0) cls='hc-part';
-      body+='<td><div class="hc '+cls+'">'+(v>0?Math.round(v):paused?'P':'')+'</div></td>';
+      body+='<td><div class="hc '+cls+'">'+(na?'':v>0?Math.round(v):paused?'P':'')+'</div></td>';
     }
     var arr=m.arrears;
     body+='<td style="text-align:center;font-size:9px;font-weight:600;color:'+(arr>0?'var(--red)':'var(--green)')+'">'+( arr>0?'MVR '+Math.round(arr):'&#10003;')+'</td>';
